@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  
+  <title>Dubcard Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #111;
+    }
+    body {
+      display: flex;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .form-container {
+      width: 35%;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #fff;
+      overflow-y: scroll;
+      box-shadow: 4px 0 10px rgba(0,0,0,0.3);
+    }
+    .form-container h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #ff6b00;
+    }
+    .preview {
+      flex-grow: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: black;
+    }
+    .preview-content {
+      width: 1920px;
+      height: 1080px;
+      background: black;
+      color: white;
+      font-size: 32px;
+      line-height: 1.6;
+      text-align: center;
+      padding: 40px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    .columns {
+      display: flex;
+      justify-content: center;
+      gap: 50px;
+      width: 100%;
+      flex: 0 0 auto;
+    }
+    .column-left, .column-right {
+      flex: 1;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .column-left {
+      text-align: right;
+      padding-right: 60px;
+    }
+    .column-right {
+      text-align: left;
+      padding-left: 60px;
+    }
+    input, textarea {
+      width: 100%;
+      margin-bottom: 15px;
+      padding: 10px 15px;
+      font-size: 16px;
+      border: 1px solid #444;
+      border-radius: 8px;
+      background: #2a2a2a;
+      color: #fff;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
+      box-sizing: border-box;
+    }
+    button {
+      width: 100%;
+      background-color: #ff6b00;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      margin-top: 5px; /* Added for spacing */
+    }
+    button:hover {
+      background-color: #e55b00;
+    }
+    label {
+      font-weight: bold;
+      margin-bottom: 5px;
+      display: block;
+      color: #ccc;
+    }
+    .button-container {
+      margin-top: 20px;
+    }
+    #adicionalesPreview {
+      max-width: 90%;
+      white-space: pre-wrap;
+    }
+    .section {
+      margin-bottom: 25px;
+    }
+    .error {
+      color: red;
+      font-size: 14px;
+      margin-bottom: 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="form-container">
+    <h1>Dubcard Generator</h1>
+
+    <div class="section">
+      <label>Pegar datos de Excel aquí (Personaje	Actor	Líneas)</label>
+      <textarea rows="8" id="excelData" placeholder="Pega aquí las tres columnas de tu Excel (Personaje, Actor, Líneas)"></textarea>
+      <button onclick="processExcelData()">Procesar Datos de Excel</button>
+    </div>
+    <div class="section">
+      <label>Traducción</label>
+      <input type="text" id="traduccion">
+    </div>
+
+    <div class="section">
+      <label>Dirección</label>
+      <input type="text" id="direccion">
+    </div>
+
+    <div class="section">
+      <label>Personajes (columna izquierda)</label>
+      <textarea rows="5" id="principales1"></textarea>
+    </div>
+
+    <div class="section">
+      <label>Voces principales (columna derecha)</label>
+      <textarea rows="5" id="principales2"></textarea>
+    </div>
+
+    <div class="section">
+      <label>Voces adicionales</label>
+      <textarea rows="4" id="adicionales"></textarea>
+    </div>
+
+    <div class="section">
+      <label>Estudio</label>
+      <input type="text" id="estudio">
+    </div>
+
+    <div class="error" id="duplicateWarning" style="display: none;">Hay nombres repetidos entre personajes, voces principales o adicionales:<br><strong>carlos carvalho</strong></div>
+
+    <div class="button-container">
+      <button id="downloadBtn" onclick="downloadPNG()">Descargar como JPG</button>
+    </div>
+  </div>
+
+  <div class="preview">
+    <div class="preview-content" id="previewContent">
+      <div id="traduccionPreview"></div>
+      <br>
+      <div id="direccionPreview"></div>
+      <br>
+      <div class="columns">
+        <div id="principales1Preview" class="column-left"></div>
+        <div id="principales2Preview" class="column-right"></div>
+      </div>
+      <br>
+      <div id="adicionalesPreview"></div>
+<br>
+<div id="logosFinales" style="margin-top: 20px; display: flex; justify-content: center; gap: 50px;">
+<img src="img/kadraj.png" style="height: 80px; object-fit: contain;">
+<img src="img/caja.png" style="height: 80px; object-fit: contain;">
+</div>
+<br>
+  
+  <script>
+    const bindInput = (id, targetId, prefix = '', callback = null) => {
+      document.getElementById(id).addEventListener('input', function () {
+        document.getElementById(targetId).textContent = this.value ? prefix + this.value : '';
+        checkDuplicates();
+        if (callback) callback();
+      });
+    };
+
+    bindInput('traduccion', 'traduccionPreview', 'Traducción: ');
+    bindInput('direccion', 'direccionPreview', 'Dirección: ');
+    bindInput('principales1', 'principales1Preview');
+    bindInput('principales2', 'principales2Preview');
+    bindInput('estudio', 'estudioPreview', 'Estudio: ');
+
+    bindInput('adicionales', 'adicionalesPreview', 'Voces adicionales: ', () => {
+      const adicionalesEl = document.getElementById('adicionalesPreview');
+      let fontSize = 32;
+      adicionalesEl.style.fontSize = fontSize + 'px';
+
+      const maxHeight = 200;
+      while (adicionalesEl.scrollHeight > maxHeight && fontSize > 10) {
+        fontSize--;
+        adicionalesEl.style.fontSize = fontSize + 'px';
+      }
+    });
+
+    function checkDuplicates() {
+      const a = document.getElementById('principales1').value.trim().split(/\n|,|;/).map(s => s.trim().toLowerCase()).filter(Boolean);
+      const b = document.getElementById('principales2').value.trim().split(/\n|,|;/).map(s => s.trim().toLowerCase()).filter(Boolean);
+      const c = document.getElementById('adicionales').value.trim().split(/\n|,|;/).map(s => s.trim().toLowerCase()).filter(Boolean);
+      const all = [...a, ...b, ...c];
+      const duplicates = all.filter((item, idx) => all.indexOf(item) !== idx);
+      const duplicateSet = new Set(duplicates);
+      const hasDuplicates = duplicateSet.size > 0;
+
+      const warning = document.getElementById('duplicateWarning');
+      const button = document.getElementById('downloadBtn');
+
+      if (hasDuplicates) {
+        warning.innerHTML = 'Hay nombres repetidos entre personajes, voces principales o adicionales:<br><strong>' + [...duplicateSet].join(', ') + '</strong>';
+        warning.style.display = 'block';
+        button.disabled = true;
+      } else {
+        warning.style.display = 'none';
+        button.disabled = false;
+      }
+    }
+
+    function downloadPNG() {
+      const content = document.getElementById('previewContent');
+      const traduccion = document.getElementById('traduccion').value.trim();
+      const filename = traduccion ? `dubcard_${traduccion.replace(/\s+/g, '_')}.jpg` : 'dubcard.jpg';
+
+      html2canvas(content, {
+        backgroundColor: '#000',
+        scale: 2 // Esto asegura la resolución de 3840x2160
+      }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = canvas.toDataURL('image/jpeg', 1.0); // Exportar como JPG con máxima calidad
+        link.click();
+      });
+    }
+
+    // Función para inicializar la previsualización al cargar la página
+    function initializePreview() {
+      document.getElementById('traduccionPreview').textContent = 'Traducción: ';
+      document.getElementById('direccionPreview').textContent = 'Dirección: ';
+      document.getElementById('estudioPreview').textContent = 'Estudio: ';
+      document.getElementById('adicionalesPreview').textContent = 'Voces adicionales: '; 
+    }
+
+    // Llama a la función de inicialización cuando el DOM esté completamente cargado
+    document.addEventListener('DOMContentLoaded', initializePreview);
+
+    // Función auxiliar para normalizar nombres (minúsculas, sin acentos, espacios normalizados)
+    function normalizeName(name) {
+      return name
+        .trim()
+        .toLowerCase()
+        .normalize("NFD") // Descompone caracteres con diacríticos (ej: é -> e + ´)
+        .replace(/[\u0300-\u036f]/g, "") // Elimina los diacríticos
+        .replace(/\s+/g, ' '); // Reemplaza múltiples espacios con uno solo
+    }
+
+    // Función auxiliar para capitalizar la primera letra de CADA palabra y poner el resto en minúscula
+    function toTitleCase(str) {
+      if (!str) return '';
+      // Convertir a minúsculas y luego dividir por espacios
+      return str.toLowerCase().split(' ').map(word => {
+        // Capitalizar la primera letra de cada palabra y el resto en minúscula
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      }).join(' ');
+    }
+
+    // FUNCIÓN PARA PROCESAR DATOS DE EXCEL
+    function processExcelData() {
+      const excelDataText = document.getElementById('excelData').value;
+      const lines = excelDataText.trim().split('\n').filter(line => line.trim() !== '');
+
+      let expandedData = [];
+      lines.forEach(line => {
+        const parts = line.split('\t');
+        if (parts.length >= 3) {
+          const personaje = parts[0].trim();
+          const actorCellContent = parts[1].trim();
+          const lineas = parseInt(parts[2].trim(), 10);
+
+          if (!isNaN(lineas)) {
+            // Define delimiters for splitting group names
+            // Ordered from multi-character to single-character to ensure correct splitting
+            const delimiters = [' / ', '/', ', ', ',', '; ', ';', ' & ', '&', ' y ', ' e ', ' con ']; 
+            let currentActorsToProcess = [actorCellContent]; 
+            let nextActorsToProcess = [];
+
+            // Iteratively split by all delimiters
+            delimiters.forEach(delimiter => {
+                nextActorsToProcess = []; // Reset for each delimiter
+                currentActorsToProcess.forEach(act => {
+                    // Split only if the delimiter exists in the current actor string
+                    if (act.includes(delimiter)) {
+                        act.split(delimiter).forEach(subAct => nextActorsToProcess.push(subAct.trim()));
+                    } else {
+                        nextActorsToProcess.push(act.trim());
+                    }
+                });
+                currentActorsToProcess = nextActorsToProcess.filter(Boolean); // Filter out any empty strings resulting from splits
+            });
+
+            // Ensure unique actors from this group processing,
+            // and then push to expandedData with original lines.
+            // Using a Set here to deduplicate within the group cell itself before adding to expandedData
+            const uniqueActorsInGroup = new Set(currentActorsToProcess);
+            uniqueActorsInGroup.forEach(actor => {
+              if (actor) { // Ensure actor name is not empty
+                expandedData.push({ personaje, actor, lineas });
+              }
+            });
+          }
+        }
+      });
+
+      // Sort the expanded data by number of lines (descending)
+      expandedData.sort((a, b) => b.lineas - a.lineas);
+
+      // Clear fields before populating
+      document.getElementById('principales1').value = '';
+      document.getElementById('principales2').value = '';
+      document.getElementById('adicionales').value = '';
+
+      let principales1Content = [];
+      let principales2Content = [];
+      let adicionalesContent = [];
+      // `usedNamesSet` will store all normalized names (characters and actors)
+      // that have been explicitly placed in the principal lists OR
+      // those that are subsequently added to the additional list.
+      let usedNamesSet = new Set(); 
+      
+      // --- Pass 1: Populate the top 5 principal entries ---
+      // We iterate through expandedData to find the top 5 entries based on lines
+      let principalEntriesCount = 0;
+      for (const entry of expandedData) {
+        if (principalEntriesCount < 5) {
+          const currentPersonaje = entry.personaje;
+          const currentActor = entry.actor;
+          
+          // Aplicar toTitleCase al personaje
+          principales1Content.push(toTitleCase(currentPersonaje));
+          principales2Content.push(toTitleCase(currentActor)); // También para el actor, para asegurar el mismo formato
+          
+          // Mark these names (normalized) as used so they don't appear in "Voces adicionales"
+          usedNamesSet.add(normalizeName(currentPersonaje));
+          usedNamesSet.add(normalizeName(currentActor));
+          
+          principalEntriesCount++;
+        } else {
+            // Once we have 5 principal entries, we can stop processing for principals
+            break; 
+        }
+      }
+
+      // --- Pass 2: Populate additional voices with deduplication ---
+      // Iterate through ALL expandedData entries again (not just those after the first 5).
+      // This ensures we catch every actor, regardless of their initial line count rank,
+      // and only add them to 'adicionales' if they haven't been 'used' yet.
+      for (const entry of expandedData) {
+        const currentActor = entry.actor;
+        const currentActorNormalized = normalizeName(currentActor);
+
+        // Only add to adicionalesContent if the normalized actor name has not been used yet.
+        if (!usedNamesSet.has(currentActorNormalized)) {
+          adicionalesContent.push(toTitleCase(currentActor)); // Aplicar toTitleCase a los actores adicionales
+          usedNamesSet.add(currentActorNormalized); // Mark as used to prevent further repetitions
+        }
+      }
+
+      document.getElementById('principales1').value = principales1Content.join('\n');
+      document.getElementById('principales2').value = principales2Content.join('\n');
+      document.getElementById('adicionales').value = adicionalesContent.join(', '); 
+      
+      // Trigger input events to update preview and check for duplicates in UI
+      document.getElementById('principales1').dispatchEvent(new Event('input'));
+      document.getElementById('principales2').dispatchEvent(new Event('input'));
+      document.getElementById('adicionales').dispatchEvent(new Event('input'));
+    }
+  </script>
+
+</body></html>
